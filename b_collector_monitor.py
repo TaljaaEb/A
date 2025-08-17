@@ -10,7 +10,7 @@ C_PORT = 5000
 
 LISTEN_HOST = "0.0.0.0"
 LISTEN_PORT = 5051  # TCP trigger port
-HTTP_PORT = 8000    # HTTP trigger port (Azure App Service compatible)
+HTTP_PORT = 80    # HTTP trigger port (Azure App Service compatible)
 
 # ------------------------------
 # Helpers
@@ -95,5 +95,6 @@ if __name__ == "__main__":
     print("[B] Collector Monitor is running (TCP + HTTP triggers enabled)")
     # Block forever
     threading.Event().wait()
+
 
 
