@@ -1,15 +1,20 @@
-
 # b_collector_monitor.py
 import socket
 import json
 import requests
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 C_HOST = "127.0.0.1"  # C server IP
 C_PORT = 5000
 
 LISTEN_HOST = "0.0.0.0"
-LISTEN_PORT = 5051  # Matches A's trigger port
+LISTEN_PORT = 5051  # TCP trigger port
+HTTP_PORT = 8080    # HTTP trigger port (Azure App Service compatible)
 
+# ------------------------------
+# Helpers
+# ------------------------------
 def extract_strings_recursive(test_str, tag):
     start_idx = test_str.find("<" + tag + ">")
     if start_idx == -1:
@@ -18,20 +23,6 @@ def extract_strings_recursive(test_str, tag):
     res = [test_str[start_idx+len(tag)+2:end_idx]]
     res += extract_strings_recursive(test_str[end_idx+len(tag)+3:], tag)
     return res
-
-def wait_for_success():
-    """Wait for trigger from A and return True when received."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((LISTEN_HOST, LISTEN_PORT))
-        s.listen()
-        print(f"[B] Waiting for trigger on port {LISTEN_PORT}...")
-        while True:
-            conn, addr = s.accept()
-            with conn:
-                data = conn.recv(1024).decode().strip()
-                if data == "SUCCESS":
-                    print("[B] Received SUCCESS trigger from A")
-                    handle_transaction_pull()
 
 def handle_transaction_pull():
     """Pull data from A and send to C."""
@@ -55,5 +46,52 @@ def send_to_c(transactions):
     except Exception as e:
         print(f"[B] Error sending to C: {e}")
 
+# ------------------------------
+# TCP trigger server
+# ------------------------------
+def tcp_trigger_server():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((LISTEN_HOST, LISTEN_PORT))
+        s.listen()
+        print(f"[B] Waiting for TCP trigger on port {LISTEN_PORT}...")
+        while True:
+            conn, addr = s.accept()
+            with conn:
+                data = conn.recv(1024).decode().strip()
+                if data == "SUCCESS":
+                    print("[B] Received SUCCESS trigger (TCP)")
+                    handle_transaction_pull()
+                    conn.sendall(b"ACK")
+
+# ------------------------------
+# HTTP trigger server
+# ------------------------------
+class TriggerHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/trigger":
+            print("[B] Received HTTP trigger")
+            handle_transaction_pull()
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Triggered transaction pull")
+        else:
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"Not Found")
+
+def http_trigger_server():
+    server_address = (LISTEN_HOST, HTTP_PORT)
+    httpd = HTTPServer(server_address, TriggerHandler)
+    print(f"[B] Listening for HTTP trigger at http://{LISTEN_HOST}:{HTTP_PORT}/trigger")
+    httpd.serve_forever()
+
+# ------------------------------
+# Entry point
+# ------------------------------
 if __name__ == "__main__":
-    wait_for_success()
+    threading.Thread(target=tcp_trigger_server, daemon=True).start()
+    threading.Thread(target=http_trigger_server, daemon=True).start()
+
+    print("[B] Collector Monitor is running (TCP + HTTP triggers enabled)")
+    # Block forever
+    threading.Event().wait()
