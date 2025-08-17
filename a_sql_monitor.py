@@ -21,7 +21,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"Not Found")
 
-def run(server_class=HTTPServer, handler_class=Handler, host="0.0.0.0", port=8000):
+def run(server_class=HTTPServer, handler_class=Handler, host="0.0.0.0", port=80):
     server_address = (host, port)
     httpd = server_class(server_address, handler_class)
     print(f"[A] Serving transactions at http://{host}:{port}/transactions")
@@ -29,3 +29,4 @@ def run(server_class=HTTPServer, handler_class=Handler, host="0.0.0.0", port=800
 
 if __name__ == "__main__":
     run()
+
